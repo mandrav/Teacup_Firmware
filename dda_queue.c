@@ -19,6 +19,10 @@
 #include	"clock.h"
 #include	"memory_barrier.h"
 
+#ifdef SD
+	#include	"sd.h"
+#endif
+
 /// movebuffer head pointer. Points to the last move in the queue.
 /// this variable is used both in and out of interrupts, but is
 /// only written outside of interrupts.
@@ -108,8 +112,20 @@ void enqueue_home(TARGET *t, uint8_t endstop_check, uint8_t endstop_stop_cond) {
 	while (queue_full())
 		delay_us(100);
 
-	uint8_t h = mb_head + 1;
-	h &= (MOVEBUFFER_SIZE - 1);
+	uint8_t h;
+	#ifdef SD
+		if (sdflags & SDFLAG_WRITING) {
+			// only use the first queue position when writing to SD
+			h = 0;
+		}
+		else {
+			h = mb_head + 1;
+			h &= (MOVEBUFFER_SIZE - 1);
+		}
+	#else
+		h = mb_head + 1;
+		h &= (MOVEBUFFER_SIZE - 1);
+	#endif
 
 	DDA* new_movebuffer = &(movebuffer[h]);
 
@@ -139,6 +155,12 @@ void enqueue_home(TARGET *t, uint8_t endstop_check, uint8_t endstop_stop_cond) {
     isdead = (movebuffer[mb_tail].live == 0);
   ATOMIC_END
 
+  #ifdef SD
+    if (sdflags & SDFLAG_WRITING) {
+      // todo: write some precalculated data from dda_create eg distance
+    }
+    else
+  #endif
 	if (isdead) {
 		next_move();
 		// Compensate for the cli() in setTimer().
