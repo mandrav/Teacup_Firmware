@@ -152,6 +152,10 @@ void sersendf_P(PGM_P format_P, ...) {
           serwrite_int32_vf(GET_ARG(uint32_t), 3);
 					j = 0;
 					break;
+				case 't':
+					serial_writestr(va_arg(args, uint8_t *));
+					j = 0;
+					break;
 				default:
 					serial_writechar(c);
 					j = 0;
