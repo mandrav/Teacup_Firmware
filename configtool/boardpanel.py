@@ -18,7 +18,6 @@ from configtool.sensorpage import SensorsPage
 from configtool.heaterspage import HeatersPage
 from configtool.communicationspage import CommunicationsPage
 from configtool.cpupage import CpuPage
-from configtool.protectedfiles import protectedFiles
 from configtool.thermistortablefile import generateTempTables
 
 
@@ -359,7 +358,7 @@ class BoardPanel(wx.Panel):
       else:
         self.sensors[k][3] = None
 
-    if os.path.basename(fn) in protectedFiles:
+    if os.path.basename(fn) in self.settings.protectedfiles:
       self.parent.enableSaveBoard(False, True)
       self.protFileLoaded = True
     else:
@@ -437,7 +436,7 @@ class BoardPanel(wx.Panel):
     return rc
 
   def saveConfigFile(self, path):
-    if os.path.basename(path) in protectedFiles:
+    if os.path.basename(path) in self.settings.protectedfiles:
       dlg = wx.MessageDialog(self, "Unable to overwrite %s." % path,
                              "Protected file error", wx.OK + wx.ICON_ERROR)
       dlg.ShowModal()
