@@ -85,6 +85,10 @@ class Settings:
     else:
       print "Missing %s section - assuming defaults." % self.section
 
+    self.__boards__ = []
+    self.__printers__ = []
+    self.protectedfiles = []
+
     self.thermistorpresets = {}
 
     self.settingsfile = os.path.join(folder, SETTINGSFILE)
@@ -95,6 +99,21 @@ class Settings:
       print ("Settings file %s does not exist."
              % SETTINGSFILE)
       return
+
+    section = "protectedfiles"
+    if self.cfgsettings.has_section(section):
+      for opt, value in self.cfgsettings.items(section):
+        value = value.strip().replace(" ", "").replace("\n", "")
+        if opt == "boards":
+          self.__boards__ = value.split(",")
+        elif opt == "printers":
+          self.__printers__ = value.split(",")
+
+    for b in self.__boards__:
+      self.protectedfiles.append("board.%s.h" % b)
+
+    for p in self.__printers__:
+      self.protectedfiles.append("printer.%s.h" % p)
 
     section = "thermistors"
     if self.cfgsettings.has_section(section):
