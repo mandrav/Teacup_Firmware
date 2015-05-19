@@ -6,6 +6,8 @@ from configtool.data import BSIZESMALL, offsetTcLabel
 
 INIFILE = "configtool.ini"
 DEFAULT_INIFILE = "configtool.default.ini"
+# TODO: should be configtool/settings.ini with OS-specific proper dir separators.
+SETTINGSFILE = "configsettings.ini"
 
 ARDUINODIR = 0
 CFLAGS = 1
@@ -82,6 +84,27 @@ class Settings:
           print "Unknown %s option: %s - ignoring." % (self.section, opt)
     else:
       print "Missing %s section - assuming defaults." % self.section
+
+    self.thermistorpresets = {}
+
+    self.settingsfile = os.path.join(folder, SETTINGSFILE)
+    self.cfgsettings = ConfigParser.ConfigParser()
+    self.cfgsettings.optionxform = str
+
+    if not self.cfgsettings.read(self.settingsfile):
+      print ("Settings file %s does not exist."
+             % SETTINGSFILE)
+      return
+
+    section = "thermistors"
+    if self.cfgsettings.has_section(section):
+      for opt, value in self.cfgsettings.items(section):
+        value = value.strip().replace(" ", "")
+        vl = value.split(",")
+        if len(vl) != 4 and len(vl) != 7:
+          print "Invalid entry for thermistor %s." % opt
+        else:
+          self.thermistorpresets[opt] = vl
 
   def saveSettings(self):
     self.section = "configtool"
