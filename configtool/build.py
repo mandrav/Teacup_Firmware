@@ -5,7 +5,7 @@ import os, re
 from os.path import isfile, join
 from sys import platform
 
-if platform == "win32":
+if platform.startswith("win"):
   from _subprocess import STARTF_USESHOWWINDOW
 
 (scriptEvent, EVT_SCRIPT_UPDATE) = wx.lib.newevent.NewEvent()
@@ -24,6 +24,13 @@ class ScriptTools:
     self.settings = settings
 
   def figureCommandPath(self, baseCommand):
+    findConf = False
+    if baseCommand == "avrdude":
+      findConf = True
+
+    if platform.startswith("win"):
+      baseCommand += ".exe"
+
     if self.settings.arduinodir:
       cmdpath = self.settings.arduinodir
 
@@ -39,8 +46,24 @@ class ScriptTools:
         if os.path.exists(cmdpathTry):
           cmdpath = "\"" + cmdpathTry + "\""
           break
+
+      if findConf:
+        confpath = cmdpath.strip("\"")
+        exepos = confpath.rfind(".exe")
+        if exepos >= 0:
+          confpath = confpath[0:exepos]
+        confpath += ".conf"
+        if not os.path.exists(confpath):
+          confpath = os.path.split(confpath)[0]
+          confpath = os.path.split(confpath)[0]
+          confpath = os.path.join(confpath, "etc")
+          confpath = os.path.join(confpath, "avrdude.conf")
+        if os.path.exists(confpath):
+          cmdpath += " -C \"" + confpath + "\""
+
     else:
       cmdpath = baseCommand
+      # No need to search avrdude.conf in this case.
 
     return cmdpath
 
@@ -64,7 +87,7 @@ class ScriptThread:
     return self.running
 
   def Run(self):
-    if platform == "win32":
+    if platform.startswith("win"):
       startupinfo = subprocess.STARTUPINFO()
       startupinfo.dwFlags |= STARTF_USESHOWWINDOW
 
@@ -73,7 +96,7 @@ class ScriptThread:
       wx.PostEvent(self.win, evt)
       args = shlex.split(str(cmd))
       try:
-        if platform == "win32":
+        if platform.startswith("win"):
           p = subprocess.Popen(args, stderr = subprocess.STDOUT,
                                stdout = subprocess.PIPE,
                                startupinfo = startupinfo)
@@ -225,6 +248,14 @@ class Build(wx.Dialog):
     self.script = []
     cmdpath = ScriptTools(self.settings).figureCommandPath("avr-gcc")
 
+    # This is ugly:
+    # Work around a problem of avr-ld.exe coming with Arduino 1.6.4 for
+    # Windows. Without this it always drops this error message:
+    #   collect2.exe: error: ld returned 5 exit status 255
+    # Just enabling verbose messages allows ld.exe to complete without failure.
+    if platform == "win32":
+      cmdpath += " -Wl,-V"
+
     ofiles = ["\"" + join(self.root, "build", f) + "\""
               for f in os.listdir(join(self.root, "build"))
                 if isfile(join(self.root, "build", f)) and f.endswith(".o")]
@@ -304,7 +335,7 @@ class Build(wx.Dialog):
     reBss = re.compile("\.bss\s+([0-9a-f]+)")
     reEEProm = re.compile("\.eeprom\s+([0-9a-f]+)")
 
-    self.log.AppendText("\n          ATmega...    '168   '328(P)"
+    self.log.AppendText("\n                   ATmega...     '168   '328(P)"
                         "   '644(P)     '1280\n")
     for l in self.reportLines:
       m = reText.search(l)
@@ -385,8 +416,6 @@ class Upload(wx.Dialog):
     cmdpath = ScriptTools(self.settings).figureCommandPath("avrdude")
     hexpath = "\"" + join(self.root, "teacup.hex") + "\""
 
-    if self.settings.arduinodir:
-      cmdpath = cmdpath + " -C " + cmdpath.rstrip("\"") + ".conf\""
     cmd = cmdpath + " -c %s -b %s -p %s -P %s -U flash:w:%s:i" % \
           (self.settings.programmer, self.baud, self.cpu, self.settings.port,
            hexpath)

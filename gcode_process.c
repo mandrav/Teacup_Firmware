@@ -63,30 +63,29 @@ void process_gcode_command() {
 
 	// implement axis limits
 	#ifdef	X_MIN
-    if (next_target.target.axis[X] < X_MIN * 1000.)
-      next_target.target.axis[X] = X_MIN * 1000.;
+    if (next_target.target.axis[X] < (int32_t)(X_MIN * 1000.))
+      next_target.target.axis[X] = (int32_t)(X_MIN * 1000.);
 	#endif
 	#ifdef	X_MAX
-    if (next_target.target.axis[X] > X_MAX * 1000.)
-      next_target.target.axis[X] = X_MAX * 1000.;
+    if (next_target.target.axis[X] > (int32_t)(X_MAX * 1000.))
+      next_target.target.axis[X] = (int32_t)(X_MAX * 1000.);
 	#endif
 	#ifdef	Y_MIN
-    if (next_target.target.axis[Y] < Y_MIN * 1000.)
-      next_target.target.axis[Y] = Y_MIN * 1000.;
+    if (next_target.target.axis[Y] < (int32_t)(Y_MIN * 1000.))
+      next_target.target.axis[Y] = (int32_t)(Y_MIN * 1000.);
 	#endif
 	#ifdef	Y_MAX
-    if (next_target.target.axis[Y] > Y_MAX * 1000.)
-      next_target.target.axis[Y] = Y_MAX * 1000.;
+    if (next_target.target.axis[Y] > (int32_t)(Y_MAX * 1000.))
+      next_target.target.axis[Y] = (int32_t)(Y_MAX * 1000.);
 	#endif
 	#ifdef	Z_MIN
-    if (next_target.target.axis[Z] < Z_MIN * 1000.)
-      next_target.target.axis[Z] = Z_MIN * 1000.;
+    if (next_target.target.axis[Z] < (int32_t)(Z_MIN * 1000.))
+      next_target.target.axis[Z] = (int32_t)(Z_MIN * 1000.);
 	#endif
 	#ifdef	Z_MAX
-    if (next_target.target.axis[Z] > Z_MAX * 1000.)
-      next_target.target.axis[Z] = Z_MAX * 1000.;
+    if (next_target.target.axis[Z] > (int32_t)(Z_MAX * 1000.))
+      next_target.target.axis[Z] = (int32_t)(Z_MAX * 1000.);
 	#endif
-
 
 	// The GCode documentation was taken from http://reprap.org/wiki/Gcode .
 
@@ -181,16 +180,18 @@ void process_gcode_command() {
 				//?
 				//? Example: G28
 				//?
-        //? This causes the RepRap machine to search for its X, Y and Z zero
+        //? This causes the RepRap machine to search for its X, Y and Z
         //? endstops. It does so at high speed, so as to get there fast. When
         //? it arrives it backs off slowly until the endstop is released again.
         //? Backing off slowly ensures more accurate positioning.
 				//?
-				//? If you add coordinates, then just the axes with coordinates specified will be zeroed.  Thus
+        //? If you add axis characters, then just the axes specified will be
+        //? seached. Thus
 				//?
-				//? G28 X0 Y72.3
+        //?   G28 X Y72.3
 				//?
-				//? will zero the X and Y axes, but not Z.  The actual coordinate values are ignored.
+        //? will zero the X and Y axes, but not Z. Coordinate values are
+        //? ignored.
 				//?
 
 				queue_wait();
