@@ -5,12 +5,10 @@
 */
 
 #include	<string.h>
-#ifndef SIMULATOR
-#include	<avr/interrupt.h>
-#endif
 
 #include	"gcode_parse.h"
 
+#include "cpu.h"
 #include	"dda.h"
 #include	"dda_queue.h"
 #include	"watchdog.h"
@@ -26,13 +24,14 @@
 #include	"clock.h"
 #include	"config_wrapper.h"
 #include	"home.h"
+#include "sd.h"
+
 
 /// the current tool
 uint8_t tool;
 
 /// the tool to be changed when we get an M6
 uint8_t next_tool;
-
 
 /************************************************************************//**
 
@@ -101,6 +100,7 @@ void process_gcode_command() {
 
 	if (next_target.seen_G) {
 		uint8_t axisSelected = 0;
+
 		switch (next_target.G) {
 			case 0:
 				//? G0: Rapid Linear Motion
@@ -334,7 +334,7 @@ void process_gcode_command() {
 
 				// unknown gcode: spit an error
 			default:
-				sersendf_P(PSTR("E: Bad G-code %d"), next_target.G);
+				sersendf_P(PSTR("E: Bad G-code %d\n"), next_target.G);
 				// newline is sent from gcode_parse after we return
 				return;
 		}
@@ -373,6 +373,55 @@ void process_gcode_command() {
 				//? Undocumented.
 				tool = next_tool;
 				break;
+
+      #ifdef SD
+      case 20:
+        //? --- M20: list SD card. ---
+        sd_list("/");
+        break;
+
+      case 21:
+        //? --- M21: initialise SD card. ---
+        //?
+        //? Has to be done before doing any other operation, including M20.
+        sd_mount();
+        break;
+
+      case 22:
+        //? --- M22: release SD card. ---
+        //?
+        //? Not mandatory. Just removing the card is fine, but results in
+        //? odd behaviour when trying to read from the card anyways. M22
+        //? makes also sure SD card printing is disabled, even with the card
+        //? inserted.
+        sd_unmount();
+        break;
+
+      case 23:
+        //? --- M23: select file. ---
+        //?
+        //? This opens a file for reading. This file is valid up to M22 or up
+        //? to the next M23.
+        sd_open(gcode_str_buf);
+        break;
+
+      case 24:
+        //? --- M24: start/resume SD print. ---
+        //?
+        //? This makes the SD card available as a G-code source. File is the
+        //? one selected with M23.
+        gcode_sources |= GCODE_SOURCE_SD;
+        break;
+
+      case 25:
+        //? --- M25: pause SD print. ---
+        //?
+        //? This removes the SD card from the bitfield of available G-code
+        //? sources. The file is kept open. The position inside the file
+        //? is kept as well, to allow resuming.
+        gcode_sources &= ! GCODE_SOURCE_SD;
+        break;
+      #endif /* SD */
 
 			case 82:
 				//? --- M82 - Set E codes absolute ---
@@ -508,7 +557,7 @@ void process_gcode_command() {
 				//?
 				break;
 
-			#ifdef	DEBUG
+      #ifdef DEBUG
 			case 111:
 				//? --- M111: Set Debug Level ---
 				//?
@@ -528,7 +577,7 @@ void process_gcode_command() {
 					break;
 				debug_flags = next_target.S;
 				break;
-			#endif
+      #endif /* DEBUG */
 
       case 112:
         //? --- M112: Emergency Stop ---
@@ -564,26 +613,26 @@ void process_gcode_command() {
 					queue_wait();
 				#endif
 				update_current_position();
-				sersendf_P(PSTR("X:%lq,Y:%lq,Z:%lq,E:%lq,F:%lu"),
+				sersendf_P(PSTR("X:%lq,Y:%lq,Z:%lq,E:%lq,F:%lu\n"),
                         current_position.axis[X], current_position.axis[Y],
                         current_position.axis[Z], current_position.axis[E],
 				                current_position.F);
 
-				#ifdef	DEBUG
-					if (DEBUG_POSITION && (debug_flags & DEBUG_POSITION)) {
-						sersendf_P(PSTR(",c:%lu}\nEndpoint: X:%ld,Y:%ld,Z:%ld,E:%ld,F:%lu,c:%lu}"),
-                            movebuffer[mb_tail].c, movebuffer[mb_tail].endpoint.axis[X],
-                            movebuffer[mb_tail].endpoint.axis[Y], movebuffer[mb_tail].endpoint.axis[Z],
-                            movebuffer[mb_tail].endpoint.axis[E], movebuffer[mb_tail].endpoint.F,
-						#ifdef ACCELERATION_REPRAP
-							movebuffer[mb_tail].end_c
-						#else
-							movebuffer[mb_tail].c
-						#endif
-						);
-						print_queue();
-					}
-				#endif /* DEBUG */
+        if (DEBUG_POSITION && (debug_flags & DEBUG_POSITION)) {
+          sersendf_P(PSTR("Endpoint: X:%ld,Y:%ld,Z:%ld,E:%ld,F:%lu,c:%lu}\n"),
+                     movebuffer[mb_tail].endpoint.axis[X],
+                     movebuffer[mb_tail].endpoint.axis[Y],
+                     movebuffer[mb_tail].endpoint.axis[Z],
+                     movebuffer[mb_tail].endpoint.axis[E],
+                     movebuffer[mb_tail].endpoint.F,
+                     #ifdef ACCELERATION_REPRAP
+                       movebuffer[mb_tail].end_c
+                     #else
+                       movebuffer[mb_tail].c
+                     #endif
+          );
+          print_queue();
+        }
 
 				// newline is sent from gcode_parse after we return
 				break;
@@ -600,7 +649,7 @@ void process_gcode_command() {
 				//?  FIRMWARE_NAME:Teacup FIRMWARE_URL:http://github.com/traumflug/Teacup_Firmware/ PROTOCOL_VERSION:1.0 MACHINE_TYPE:Mendel EXTRUDER_COUNT:1 TEMP_SENSOR_COUNT:1 HEATER_COUNT:1
 				//?
 
-				sersendf_P(PSTR("FIRMWARE_NAME:Teacup FIRMWARE_URL:http://github.com/traumflug/Teacup_Firmware/ PROTOCOL_VERSION:1.0 MACHINE_TYPE:Mendel EXTRUDER_COUNT:%d TEMP_SENSOR_COUNT:%d HEATER_COUNT:%d"), 1, NUM_TEMP_SENSORS, NUM_HEATERS);
+				sersendf_P(PSTR("FIRMWARE_NAME:Teacup FIRMWARE_URL:http://github.com/traumflug/Teacup_Firmware/ PROTOCOL_VERSION:1.0 MACHINE_TYPE:Mendel EXTRUDER_COUNT:%d TEMP_SENSOR_COUNT:%d HEATER_COUNT:%d\n"), 1, NUM_TEMP_SENSORS, NUM_HEATERS);
 				// newline is sent from gcode_parse after we return
 				break;
 
@@ -626,36 +675,37 @@ void process_gcode_command() {
           const char* const triggered = PSTR("triggered ");
 
           #if defined(X_MIN_PIN)
-            sersendf_P(PSTR("x_min:"));
-            x_min() ? sersendf_P(triggered) : sersendf_P(open);
+            serial_writestr_P(PSTR("x_min:"));
+            x_min() ? serial_writestr_P(triggered) : serial_writestr_P(open);
           #endif
           #if defined(X_MAX_PIN)
-            sersendf_P(PSTR("x_max:"));
-            x_max() ? sersendf_P(triggered) : sersendf_P(open);
+            serial_writestr_P(PSTR("x_max:"));
+            x_max() ? serial_writestr_P(triggered) : serial_writestr_P(open);
           #endif
           #if defined(Y_MIN_PIN)
-            sersendf_P(PSTR("y_min:"));
-            y_min() ? sersendf_P(triggered) : sersendf_P(open);
+            serial_writestr_P(PSTR("y_min:"));
+            y_min() ? serial_writestr_P(triggered) : serial_writestr_P(open);
           #endif
           #if defined(Y_MAX_PIN)
-            sersendf_P(PSTR("y_max:"));
-            y_max() ? sersendf_P(triggered) : sersendf_P(open);
+            serial_writestr_P(PSTR("y_max:"));
+            y_max() ? serial_writestr_P(triggered) : serial_writestr_P(open);
           #endif
           #if defined(Z_MIN_PIN)
-            sersendf_P(PSTR("z_min:"));
-            z_min() ? sersendf_P(triggered) : sersendf_P(open);
+            serial_writestr_P(PSTR("z_min:"));
+            z_min() ? serial_writestr_P(triggered) : serial_writestr_P(open);
           #endif
           #if defined(Z_MAX_PIN)
-            sersendf_P(PSTR("z_max:"));
-            z_max() ? sersendf_P(triggered) : sersendf_P(open);
+            serial_writestr_P(PSTR("z_max:"));
+            z_max() ? serial_writestr_P(triggered) : serial_writestr_P(open);
           #endif
           #if ! (defined(X_MIN_PIN) || defined(X_MAX_PIN) || \
                  defined(Y_MIN_PIN) || defined(Y_MAX_PIN) || \
                  defined(Z_MIN_PIN) || defined(Z_MAX_PIN))
-            sersendf_P(PSTR("no endstops defined"));
+            serial_writestr_P(PSTR("No endstops defined."));
           #endif
         }
         endstops_off();
+        serial_writechar('\n');
         break;
 
       #ifdef EECONFIG
@@ -721,7 +771,7 @@ void process_gcode_command() {
 				break;
       #endif /* EECONFIG */
 
-			#ifdef	DEBUG
+      #ifdef DEBUG
 			case 136:
 				//? --- M136: PRINT PID settings to host ---
 				//? Undocumented.
@@ -734,7 +784,7 @@ void process_gcode_command() {
           #endif
 				heater_print(next_target.P);
 				break;
-			#endif
+      #endif /* DEBUG */
 
 			case 140:
 				//? --- M140: Set heated bed temperature ---
@@ -746,7 +796,7 @@ void process_gcode_command() {
 				#endif
 				break;
 
-			#ifdef	DEBUG
+      #ifdef DEBUG
 			case 240:
 				//? --- M240: echo off ---
 				//? Disable echo.
@@ -764,8 +814,7 @@ void process_gcode_command() {
 				serial_writestr_P(PSTR("Echo on"));
 				// newline is sent from gcode_parse after we return
 				break;
-
-			#endif /* DEBUG */
+      #endif /* DEBUG */
 
 				// unknown mcode: spit an error
 			default:
